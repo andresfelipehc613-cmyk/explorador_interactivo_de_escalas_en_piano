@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PianoScale Studio - Visualizador de Escalas Musicales</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        studio: {
+                            950: '#09090b',
+                            900: '#121215',
+                            800: '#1c1c21',
+                            700: '#27272e',
+                            accent: '#6366f1', // Indigo
+                            root: '#f43f5e',   // Rose para la Tónica
+                            scale: '#0ea5e9',  // Sky/Cyan para notas de la escala
+                            active: '#10b981'  // Emerald cuando suena
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Estilos personalizados para las teclas del piano y animaciones */
+        body {
+            background-color: #09090b;
+            color: #f4f4f5;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Contenedor del Piano con scroll horizontal suave en móviles */
+        .piano-wrapper {
+            overflow-x: auto;
+            padding-bottom: 12px;
+        }
+        
+        .piano-wrapper::-webkit-scrollbar {
+            height: 8px;
+        }
+        .piano-wrapper::-webkit-scrollbar-track {
+            background: #121215;
+            border-radius: 4px;
+        }
+        .piano-wrapper::-webkit-scrollbar-thumb {
+            background: #27272e;
+            border-radius: 4px;
+        }
+        .piano-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+
+        /* Estructura realista del teclado */
+        .piano-container {
+            position: relative;
+            display: flex;
+            min-width: 760px; /* Asegura que las teclas sean cómodas incluso en pantallas pequeñas */
+            height: 240px;
+            background: #121215;
+            padding: 12px 12px 16px 12px;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            border: 1px solid #27272e;
+        }
+
+        .white-key {
+            position: relative;
+            flex: 1;
+            background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 92%, #cbd5e1 100%);
+            border: 1px solid #94a3b8;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            margin: 0 2px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            padding-bottom: 12px;
+            transition: transform 0.06s ease, background 0.15s ease, box-shadow 0.15s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4), inset 0 -4px 0 #cbd5e1;
+            z-index: 1;
+        }
+
+        .white-key:hover {
+            background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+        }
+
+        .white-key.pressed {
+            transform: translateY(3px);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 -1px 0 #94a3b8;
+        }
+
+        .black-key {
+            position: absolute;
+            top: 12px;
+            width: 4.4%;
+            height: 58%;
+            background: linear-gradient(180deg, #27272a 0%, #18181b 85%, #09090b 100%);
+            border: 1px solid #000000;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            padding-bottom: 10px;
+            z-index: 10;
+            transition: transform 0.06s ease, background 0.15s ease, box-shadow 0.15s ease;
+            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.7), inset 0 -3px 1px rgba(255, 255, 255, 0.15);
+            transform: translateX(-50%);
+        }
+
+        .black-key:hover {
+            background: linear-gradient(180deg, #3f3f46 0%, #27272a 90%, #18181b 100%);
+        }
+
+        .black-key.pressed {
+            transform: translateX(-50%) translateY(3px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.8), inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        /* Estados de Escala en Teclas Blancas */
+        .white-key.is-root {
+            background: linear-gradient(180deg, #ffe4e6 0%, #fda4af 60%, #f43f5e 100%);
+            border-color: #e11d48;
+            box-shadow: 0 4px 12px rgba(244, 63, 94, 0.35), inset 0 -4px 0 #be123c;
+        }
+        .white-key.is-scale {
+            background: linear-gradient(180deg, #e0f2fe 0%, #7dd3fc 65%, #0ea5e9 100%);
+            border-color: #0284c7;
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3), inset 0 -4px 0 #0369a1;
+        }
+        .white-key.is-playing {
+            background: linear-gradient(180deg, #d1fae5 0%, #6ee7b7 50%, #10b981 100%) !important;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.8) !important;
+            transform: translateY(3px);
+        }
+
+        /* Estados de Escala en Teclas Negras */
+        .black-key.is-root {
+            background: linear-gradient(180deg, #e11d48 0%, #9f1239 90%, #881337 100%);
+            border-color: #fda4af;
+            box-shadow: 0 6px 14px rgba(244, 63, 94, 0.5), inset 0 -3px 1px rgba(255, 255, 255, 0.3);
+        }
+        .black-key.is-scale {
+            background: linear-gradient(180deg, #0284c7 0%, #075985 90%, #0c4a6e 100%);
+            border-color: #7dd3fc;
+            box-shadow: 0 6px 14px rgba(14, 165, 233, 0.45), inset 0 -3px 1px rgba(255, 255, 255, 0.3);
+        }
+        .black-key.is-playing {
+            background: linear-gradient(180deg, #10b981 0%, #047857 90%, #065f46 100%) !important;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.9) !important;
+            transform: translateX(-50%) translateY(3px);
+        }
+
+        /* Badges de grados y notas */
+        .degree-badge {
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 9999px;
+            margin-bottom: 4px;
+            line-height: 1;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
+
+        .white-key .degree-badge {
+            background-color: rgba(15, 23, 42, 0.85);
+            color: #ffffff;
+        }
+        .white-key.is-root .degree-badge {
+            background-color: #881337;
+            color: #ffe4e6;
+        }
+
+        .black-key .degree-badge {
+            font-size: 0.62rem;
+            padding: 2px 4px;
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #09090b;
+        }
+        .black-key.is-root .degree-badge {
+            background-color: #ffe4e6;
+            color: #881337;
+        }
+
+        /* Destacado especial para el Pulgar (Dedo 1) en modo digitación */
+        .white-key .degree-badge.is-thumb,
+        .black-key .degree-badge.is-thumb {
+            background-color: #f59e0b;
+            color: #09090b;
+            ring: 2px solid #fef3c7;
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.65);
+        }
+
+        /* Estilo personalizado para range slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #6366f1;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #27272e;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- Barra Superior / Header -->
+    <header class="border-b border-zinc-800/80 bg-studio-900/80 backdrop-blur-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <i data-lucide="music" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                        PianoScale <span class="text-xs font-mono uppercase px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Studio</span>
+                    </h1>
+                    <p class="text-xs text-zinc-400 hidden sm:block">Visualizador Teórico y Sintetizador de Escalas</p>
+                </div>
+            </div>
+
+            <!-- Opciones Rápidas de Visualización y Sonido -->
+            <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+                <!-- Selector de Mano (MD / MI) -->
+                <div class="flex items-center bg-studio-800 p-1 rounded-lg border border-zinc-700/60" title="Seleccionar mano para la digitación">
+                    <button id="btn-hand-rh" class="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-600 text-white transition-all flex items-center gap-1">
+                        <span>✋ Mano Der.</span>
+                    </button>
+                    <button id="btn-hand-lh" class="px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all flex items-center gap-1">
+                        <span>🤚 Mano Izq.</span>
+                    </button>
+                </div>
+
+                <!-- Selector Modo de Insignia (Dedos 1-5 vs Grados) -->
+                <div class="flex items-center bg-studio-800 p-1 rounded-lg border border-zinc-700/60" title="Mostrar número de dedo o grado musical">
+                    <button id="btn-badge-fingering" class="px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-600 text-white transition-all">Dedos 1-5</button>
+                    <button id="btn-badge-degrees" class="px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all">Grados</button>
+                </div>
+
+                <!-- Selector de Notación (Inglesa vs Latina) -->
+                <div class="flex items-center bg-studio-800 p-1 rounded-lg border border-zinc-700/60" title="Cambiar sistema de notación">
+                    <button id="btn-notation-en" class="px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-600 text-white transition-all">C D E</button>
+                    <button id="btn-notation-es" class="px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all">Do Re Mi</button>
+                </div>
+
+                <!-- Toggle Etiquetas en Teclas -->
+                <button id="btn-toggle-labels" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-studio-800 hover:bg-studio-700 border border-zinc-700/60 text-xs font-medium text-zinc-200 transition-all" title="Mostrar u ocultar nombres de notas">
+                    <i data-lucide="tag" class="w-3.5 h-3.5 text-indigo-400"></i>
+                    <span class="hidden md:inline">Notas:</span> <span id="label-status" class="text-indigo-400 font-semibold">ON</span>
+                </button>
+
+                <!-- Selector de Timbre del Sintetizador -->
+                <div class="relative">
+                    <select id="synth-waveform" class="appearance-none bg-studio-800 hover:bg-studio-700 border border-zinc-700/60 text-xs font-medium text-zinc-200 rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                        <option value="warm-piano">🎹 Piano Eléctrico</option>
+                        <option value="triangle">🎶 Suave (Triangular)</option>
+                        <option value="sine">🔔 Puro (Sinusoidal)</option>
+                        <option value="sawtooth">🎸 Sintetizador</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Contenido Principal -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Panel de Control Principal: Selección de Tónica, Escala y Reproducción -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-4 bg-studio-900 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 shadow-xl">
+            
+            <!-- Selector de Nota Raíz (Tónica) -->
+            <div class="lg:col-span-5 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <label class="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-studio-root"></span>
+                        1. Nota Raíz (Tónica)
+                    </label>
+                    <span id="selected-root-display" class="text-xs font-mono text-rose-400 font-semibold">C (Do)</span>
+                </div>
+                <div id="root-selector-grid" class="grid grid-cols-6 sm:grid-cols-12 lg:grid-cols-6 gap-1.5">
+                    <!-- Botones generados dinámicamente por JS -->
+                </div>
+            </div>
+
+            <!-- Selector de Tipo de Escala -->
+            <div class="lg:col-span-4 space-y-2.5">
+                <label for="scale-select" class="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-studio-scale"></span>
+                    2. Tipo de Escala / Modo
+                </label>
+                <div class="relative">
+                    <select id="scale-select" class="w-full appearance-none bg-studio-800 hover:bg-studio-700/80 border border-zinc-700 text-white text-sm font-medium rounded-xl px-4 py-3 pr-10 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-inner">
+                        <!-- Opciones agrupadas generadas dinámicamente -->
+                    </select>
+                    <i data-lucide="chevrons-up-down" class="w-4 h-4 text-zinc-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                </div>
+                <p id="scale-description" class="text-xs text-zinc-400 leading-relaxed line-clamp-2">
+                    La escala más utilizada en la música occidental. Alegre, brillante y resuelta.
+                </p>
+            </div>
+
+            <!-- Controles de Reproducción Automática -->
+            <div class="lg:col-span-3 flex flex-col justify-between bg-studio-800/60 border border-zinc-700/50 rounded-xl p-3.5 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                        <i data-lucide="play-circle" class="w-3.5 h-3.5 text-emerald-400"></i>
+                        Audición
+                    </span>
+                    <span class="text-xs font-mono text-zinc-300 bg-studio-900 px-2 py-0.5 rounded border border-zinc-700">
+                        <span id="bpm-value">120</span> BPM
+                    </span>
+                </div>
+
+                <!-- Slider de Velocidad BPM -->
+                <div class="space-y-1">
+                    <input type="range" id="bpm-slider" min="50" max="240" value="120" class="w-full">
+                    <div class="flex justify-between text-[10px] text-zinc-500 font-mono">
+                        <span>Lento</span>
+                        <span>Moderado</span>
+                        <span>Rápido</span>
+                    </div>
+                </div>
+
+                <!-- Botones Tocar Escala / Detener -->
+                <div class="flex items-center gap-2 pt-1">
+                    <button id="btn-play-scale" class="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white text-xs sm:text-sm font-semibold py-2.5 px-3 rounded-lg shadow-lg shadow-indigo-600/25 transition-all cursor-pointer">
+                        <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                        <span>Tocar Escala</span>
+                    </button>
+                    <button id="btn-stop-scale" class="hidden flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white text-xs sm:text-sm font-semibold py-2.5 px-3 rounded-lg shadow-lg shadow-rose-600/25 transition-all cursor-pointer">
+                        <i data-lucide="square" class="w-4 h-4 fill-current"></i>
+                        <span>Detener</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sección del Piano Virtual Interactivo -->
+        <section class="space-y-2.5">
+            <!-- Leyenda de Colores, Dedos y Ayuda de Teclado Físico -->
+            <div class="flex flex-wrap items-center justify-between gap-3 px-1 text-xs">
+                <div class="flex flex-wrap items-center gap-3 sm:gap-4">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-sm bg-studio-root inline-block shadow-sm"></span>
+                        <span class="text-zinc-300 font-medium">Tónica</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-sm bg-studio-scale inline-block shadow-sm"></span>
+                        <span class="text-zinc-300 font-medium">Escala</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="px-1.5 py-0.5 rounded-full bg-amber-500 text-zinc-950 font-bold text-[10px] leading-none">1</span>
+                        <span class="text-zinc-300 font-medium">Pulgar (Paso)</span>
+                    </div>
+                    <div class="hidden xl:flex items-center gap-1.5 text-zinc-400 border-l border-zinc-800 pl-3 font-mono text-[11px]">
+                        <span>1:Pulgar</span> · <span>2:Índice</span> · <span>3:Medio</span> · <span>4:Anular</span> · <span>5:Meñique</span>
+                    </div>
+                </div>
+
+                <!-- Indicador en vivo de dedo activo durante reproducción o toque -->
+                <div id="live-finger-indicator" class="flex items-center gap-2 bg-studio-900 border border-zinc-800 px-3 py-1 rounded-full">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span id="live-finger-text" class="text-zinc-300 font-medium">
+                        Digitación: <strong class="text-emerald-400">Mano Derecha (MD)</strong>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Contenedor del Teclado de Piano (2 Octavas: C3 a B4) -->
+            <div class="piano-wrapper">
+                <div id="piano-keyboard" class="piano-container">
+                    <!-- Teclas generadas dinámicamente con JavaScript -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Panel de Información Teórica y Acordes Diatónicos -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Columna Izquierda: Notas, Grados y Fórmula de Intervalos -->
+            <div class="lg:col-span-5 bg-studio-900 border border-zinc-800/90 rounded-2xl p-5 flex flex-col justify-between space-y-5 shadow-lg">
+                <div>
+                    <div class="flex items-center justify-between border-b border-zinc-800 pb-3 mb-4">
+                        <h2 id="theory-title" class="text-base font-bold text-white flex items-center gap-2">
+                            <i data-lucide="book-open" class="w-4 h-4 text-indigo-400"></i>
+                            <span>C Mayor (Jónica)</span>
+                        </h2>
+                        <span id="note-count-badge" class="text-xs font-mono bg-studio-800 text-zinc-300 px-2.5 py-1 rounded-full border border-zinc-700">
+                            7 notas
+                        </span>
+                    </div>
+
+                    <!-- Desglose Visual de Notas, Dedos y Grados -->
+                    <div class="space-y-2 mb-5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-zinc-400 block">Secuencia de Digitación (1 Octava)</span>
+                            <span id="hand-badge-label" class="text-[11px] font-mono text-emerald-400">Mano Derecha</span>
+                        </div>
+                        <div id="scale-notes-cards" class="flex flex-wrap gap-2">
+                            <!-- Tarjetas de notas generadas dinámicamente -->
+                        </div>
+                    </div>
+
+                    <!-- Fórmula de Intervalos (Tonos y Semitonos) -->
+                    <div class="space-y-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-zinc-400 block">Estructura de Intervalos (Tonos y Semitonos)</span>
+                        <div id="intervals-formula" class="flex flex-wrap items-center gap-1.5 bg-studio-950/80 p-3 rounded-xl border border-zinc-800/80 font-mono text-xs">
+                            <!-- Fórmula generada dinámicamente -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nota Informativa / Tip -->
+                <div class="bg-indigo-950/20 border border-indigo-500/20 rounded-xl p-3 flex items-start gap-2.5 text-xs text-indigo-200/80">
+                    <i data-lucide="hand" class="w-4 h-4 text-amber-400 shrink-0 mt-0.5"></i>
+                    <p>Los círculos <strong class="text-amber-300">ámbar (1)</strong> indican el <strong>pulgar</strong> y los puntos clave donde ocurre el paso por debajo de la mano a lo largo de las 2 octavas.</p>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Acordes Diatónicos Sugeridos -->
+            <div class="lg:col-span-7 bg-studio-900 border border-zinc-800/90 rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg">
+                <div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 pb-3 mb-4">
+                        <div>
+                            <h3 class="text-base font-bold text-white flex items-center gap-2">
+                                <i data-lucide="layers" class="w-4 h-4 text-sky-400"></i>
+                                <span>Acordes Diatónicos de la Escala</span>
+                            </h3>
+                            <p class="text-xs text-zinc-400 mt-0.5">Haz clic en un acorde para escucharlo e iluminar sus notas en el piano</p>
+                        </div>
+
+                        <!-- Selector Tríadas vs Séptimas -->
+                        <div class="flex items-center bg-studio-800 p-1 rounded-lg border border-zinc-700/60">
+                            <button id="btn-chords-triad" class="px-2.5 py-1 text-xs font-medium rounded-md bg-sky-600 text-white transition-all">Tríadas</button>
+                            <button id="btn-chords-seventh" class="px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all">Séptimas (7ª)</button>
+                        </div>
+                    </div>
+
+                    <!-- Cuadrícula de Acordes -->
+                    <div id="diatonic-chords-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        <!-- Acordes generados dinámicamente -->
+                    </div>
+                </div>
+
+                <!-- Estado de acorde activo -->
+                <div id="active-chord-banner" class="hidden items-center justify-between bg-studio-800/90 border border-emerald-500/30 rounded-xl px-4 py-2.5 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        <span class="text-zinc-300">Mostrando acorde: <strong id="active-chord-name" class="text-white font-semibold">Cmaj7</strong></span>
+                        <span id="active-chord-notes" class="font-mono text-emerald-400 ml-1">(C - E - G - B)</span>
+                    </div>
+                    <button id="btn-clear-chord" class="text-zinc-400 hover:text-white underline">Volver a escala</button>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Footer Minimalista -->
+    <footer class="border-t border-zinc-800/60 bg-studio-950 py-4 mt-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-zinc-500">
+            <p>PianoScale Studio &bull; Herramienta Interactiva de Teoría Musical y Síntesis Web Audio</p>
+            <p class="font-mono">Rango: C3 (130.81 Hz) — B4 (493.88 Hz)</p>
+        </div>
+    </footer>
+
+    <!-- Lógica de Teoría Musical, Síntesis de Audio e Interfaz -->
+    <script>
+        /**
+         * ============================================================================
+         * 1. DEFINICIONES DE TEORÍA MUSICAL Y BASE DE DATOS DE ESCALAS
+         * ============================================================================
+         */
+        const NOTES_EN = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const NOTES_EN_FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+        const NOTES_DISPLAY = ['C', 'C#/Db', 'D', 'D#/Eb', 'E', 'F', 'F#/Gb', 'G', 'G#/Ab', 'A', 'A#/Bb', 'B'];
+        const NOTES_ES = ['Do', 'Do#', 'Re', 'Re#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si'];
+
+        // Nombres de grados teóricos según semitonos desde la tónica (0 a 11)
+        const DEGREE_NAMES = {
+            0: '1',
+            1: 'b2',
+            2: '2',
+            3: 'b3',
+            4: '3',
+            5: '4',
+            6: 'b5/#4',
+            7: '5',
+            8: 'b6/#5',
+            9: '6',
+            10: 'b7',
+            11: '7'
+        };
+
+        // Catálogo completo de escalas musicales
+        const SCALES_DB = [
+            // Escalas Básicas
+            {
+                id: 'major',
+                category: 'Escalas Principales',
+                name: 'Mayor (Jónica)',
+                intervals: [0, 2, 4, 5, 7, 9, 11],
+                degrees: ['1', '2', '3', '4', '5', '6', '7'],
+                description: 'La escala fundamental de la música occidental. Sonido brillante, alegre y estable.'
+            },
+            {
+                id: 'natural_minor',
+                category: 'Escalas Principales',
+                name: 'Menor Natural (Eólica)',
+                intervals: [0, 2, 3, 5, 7, 8, 10],
+                degrees: ['1', '2', 'b3', '4', '5', 'b6', 'b7'],
+                description: 'Sonido melancólico, emotivo y serio. Relativa menor de la escala mayor.'
+            },
+            {
+                id: 'harmonic_minor',
+                category: 'Escalas Principales',
+                name: 'Menor Armónica',
+                intervals: [0, 2, 3, 5, 7, 8, 11],
+                degrees: ['1', '2', 'b3', '4', '5', 'b6', '7'],
+                description: 'Posee una séptima mayor que crea una fuerte tensión hacia la tónica y un intervalo exótico de segunda aumentada.'
+            },
+            {
+                id: 'melodic_minor',
+                category: 'Escalas Principales',
+                name: 'Menor Melódica',
+                intervals: [0, 2, 3, 5, 7, 9, 11],
+                degrees: ['1', '2', 'b3', '4', '5', '6', '7'],
+                description: 'Suaviza la menor armónica elevando también el sexto grado. Muy usada en jazz moderno.'
+            },
+
+            // Pentatónicas y Blues
+            {
+                id: 'pentatonic_major',
+                category: 'Pentatónicas y Blues',
+                name: 'Pentatónica Mayor',
+                intervals: [0, 2, 4, 7, 9],
+                degrees: ['1', '2', '3', '5', '6'],
+                description: 'Escala de 5 notas sin semitonos. Muy versátil, abierta y consonante en pop, country y rock.'
+            },
+            {
+                id: 'pentatonic_minor',
+                category: 'Pentatónicas y Blues',
+                name: 'Pentatónica Menor',
+                intervals: [0, 3, 5, 7, 10],
+                degrees: ['1', 'b3', '4', '5', 'b7'],
+                description: 'La escala reina para la improvisación en rock, blues, pop y música urbana.'
+            },
+            {
+                id: 'blues',
+                category: 'Pentatónicas y Blues',
+                name: 'Escala de Blues',
+                intervals: [0, 3, 5, 6, 7, 10],
+                degrees: ['1', 'b3', '4', 'b5', '5', 'b7'],
+                description: 'Pentatónica menor con la "Blue Note" (b5) añadida para expresar tensión y alma.'
+            },
+
+            // Modos Griegos
+            {
+                id: 'dorian',
+                category: 'Modos Griegos',
+                name: 'Modo Dórico',
+                intervals: [0, 2, 3, 5, 7, 9, 10],
+                degrees: ['1', '2', 'b3', '4', '5', '6', 'b7'],
+                description: 'Escala menor con sexta mayor. Sonido sofisticado, funk, jazz y celta.'
+            },
+            {
+                id: 'phrygian',
+                category: 'Modos Griegos',
+                name: 'Modo Frigio',
+                intervals: [0, 1, 3, 5, 7, 8, 10],
+                degrees: ['1', 'b2', 'b3', '4', '5', 'b6', 'b7'],
+                description: 'Escala menor con segunda menor. Sonido oscuro, español, flamenco y metal.'
+            },
+            {
+                id: 'lydian',
+                category: 'Modos Griegos',
+                name: 'Modo Lidio',
+                intervals: [0, 2, 4, 6, 7, 9, 11],
+                degrees: ['1', '2', '3', '#4', '5', '6', '7'],
+                description: 'Escala mayor con cuarta aumentada. Sonido mágico, espacial, onírico y cinematográfico.'
+            },
+            {
+                id: 'mixolydian',
+                category: 'Modos Griegos',
+                name: 'Modo Mixolidio',
+                intervals: [0, 2, 4, 5, 7, 9, 10],
+                degrees: ['1', '2', '3', '4', '5', '6', 'b7'],
+                description: 'Escala mayor con séptima menor. Ideal para rock clásico, blues-rock y funk.'
+            },
+            {
+                id: 'locrian',
+                category: 'Modos Griegos',
+                name: 'Modo Locrio',
+                intervals: [0, 1, 3, 5, 6, 8, 10],
+                degrees: ['1', 'b2', 'b3', '4', 'b5', 'b6', 'b7'],
+                description: 'El modo más inestable y tenso debido a su quinta disminuida. Usado en metal extremo y jazz.'
+            },
+
+            // Simétricas y Exóticas
+            {
+                id: 'diminished_hw',
+                category: 'Simétricas',
+                name: 'Disminuida (Semitono-Tono)',
+                intervals: [0, 1, 3, 4, 6, 7, 9, 10],
+                degrees: ['1', 'b2', 'b3', '3', 'b5', '5', '6', 'b7'],
+                description: 'Escala simétrica de 8 notas (octatónica) que alterna semitonos y tonos. Gran tensión cromática.'
+            },
+            {
+                id: 'whole_tone',
+                category: 'Simétricas',
+                name: 'Tonos Enteros (Hexátona)',
+                intervals: [0, 2, 4, 6, 8, 10],
+                degrees: ['1', '2', '3', '#4', '#5', 'b7'],
+                description: 'Compuesta exclusivamente por tonos enteros. Produce una atmósfera flotante e impresionista.'
+            }
+        ];
+
+        // Mapeo del teclado de la computadora a índices de notas del piano (0 = C3 ... 23 = B4)
+        const KEYBOARD_MAP = {
+            // Octava 3 (Fila inferior Z - M + teclas negras superiores S, D, G, H, J)
+            'z': 0,  // C3
+            's': 1,  // C#3
+            'x': 2,  // D3
+            'd': 3,  // D#3
+            'c': 4,  // E3
+            'v': 5,  // F3
+            'g': 6,  // F#3
+            'b': 7,  // G3
+            'h': 8,  // G#3
+            'n': 9,  // A3
+            'j': 10, // A#3
+            'm': 11, // B3
+            // Octava 4 (Fila QWERTY Q - U + teclas negras 2, 3, 5, 6, 7)
+            'q': 12, // C4
+            '2': 13, // C#4
+            'w': 14, // D4
+            '3': 15, // D#4
+            'e': 16, // E4
+            'r': 17, // F4
+            '5': 18, // F#4
+            't': 19, // G4
+            '6': 20, // G#4
+            'y': 21, // A4
+            '7': 22, // A#4
+            'u': 23  // B4
+        };
+
+        /**
+         * ============================================================================
+         * 2. ESTADO GLOBAL DE LA APLICACIÓN
+         * ============================================================================
+         */
+        const state = {
+            rootIndex: 0,           // 0 = C, 1 = C#, ..., 11 = B
+            scaleId: 'major',       // ID de la escala actual
+            hand: 'RH',             // 'RH' (Mano Derecha) o 'LH' (Mano Izquierda)
+            badgeMode: 'fingering', // 'fingering' (Dedos 1-5) o 'degrees' (Grados 1-b7)
+            notation: 'EN',         // 'EN' (C, D, E) o 'ES' (Do, Re, Mi)
+            showLabels: true,       // Mostrar nombres de notas en teclas
+            chordMode: 'triad',     // 'triad' o 'seventh'
+            waveform: 'warm-piano', // Timbre del sintetizador
+            bpm: 120,               // Velocidad de reproducción
+            isPlayingScale: false,  // Estado del reproductor automático
+            playbackTimers: [],     // IDs de setTimeout para poder cancelar reproducción
+            activeChordNotes: null  // Array de índices absolutos (0-23) si se selecciona un acorde
+        };
+
+        const FINGER_NAMES = {
+            1: '1 (Pulgar)',
+            2: '2 (Índice)',
+            3: '3 (Medio)',
+            4: '4 (Anular)',
+            5: '5 (Meñique)'
+        };
+
+        /**
+         * ============================================================================
+         * 3. MOTOR DE SÍNTESIS DE AUDIO (WEB AUDIO API)
+         * ============================================================================
+         */
+        class PianoSynth {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            /**
+             * Calcula la frecuencia en Hz para una nota MIDI.
+             * C3 corresponde a MIDI 48 (130.81 Hz), A4 a MIDI 69 (440 Hz).
+             */
+            midiToFreq(midiNumber) {
+                return 440 * Math.pow(2, (midiNumber - 69) / 12);
+            }
+
+            /**
+             * Reproduce una nota dado su índice en nuestro piano (0 = C3 ... 23 = B4)
+             */
+            playNote(keyIndex, duration = 0.75, velocity = 0.45) {
+                try {
+                    this.init();
+                    const midi = 48 + keyIndex; // 48 es C3
+                    const freq = this.midiToFreq(midi);
+                    const now = this.ctx.currentTime;
+
+                    const masterGain = this.ctx.createGain();
+                    masterGain.connect(this.ctx.destination);
+
+                    // Envolvente ADSR suave para evitar clics
+                    masterGain.gain.setValueAtTime(0.001, now);
+                    masterGain.gain.exponentialRampToValueAtTime(velocity, now + 0.015);
+                    masterGain.gain.exponentialRampToValueAtTime(velocity * 0.6, now + 0.2);
+                    masterGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+                    if (state.waveform === 'warm-piano') {
+                        // Síntesis aditiva de piano eléctrico cálido (Fundamental + 2º armónico)
+                        const osc1 = this.ctx.createOscillator();
+                        const osc2 = this.ctx.createOscillator();
+                        const subGain = this.ctx.createGain();
+                        const filter = this.ctx.createBiquadFilter();
+
+                        osc1.type = 'triangle';
+                        osc1.frequency.setValueAtTime(freq, now);
+
+                        osc2.type = 'sine';
+                        osc2.frequency.setValueAtTime(freq * 2, now);
+                        subGain.gain.setValueAtTime(0.25, now);
+
+                        filter.type = 'lowpass';
+                        filter.frequency.setValueAtTime(2200, now);
+                        filter.frequency.exponentialRampToValueAtTime(600, now + duration);
+
+                        osc1.connect(filter);
+                        osc2.connect(subGain);
+                        subGain.connect(filter);
+                        filter.connect(masterGain);
+
+                        osc1.start(now);
+                        osc2.start(now);
+                        osc1.stop(now + duration + 0.05);
+                        osc2.stop(now + duration + 0.05);
+                    } else {
+                        // Formas de onda clásicas
+                        const osc = this.ctx.createOscillator();
+                        const filter = this.ctx.createBiquadFilter();
+
+                        osc.type = state.waveform;
+                        osc.frequency.setValueAtTime(freq, now);
+
+                        filter.type = 'lowpass';
+                        filter.frequency.setValueAtTime(state.waveform === 'sawtooth' ? 1600 : 3500, now);
+
+                        osc.connect(filter);
+                        filter.connect(masterGain);
+
+                        osc.start(now);
+                        osc.stop(now + duration + 0.05);
+                    }
+                } catch (err) {
+                    console.warn('Error al reproducir audio:', err);
+                }
+            }
+
+            /**
+             * Reproduce un acorde simultáneamente
+             */
+            playChord(keyIndices, duration = 1.2) {
+                const vel = Math.min(0.35, 0.7 / keyIndices.length);
+                keyIndices.forEach((idx, i) => {
+                    // Ligero arpegio (15ms) para sonar más natural como un pianista
+                    setTimeout(() => {
+                        this.playNote(idx, duration, vel);
+                    }, i * 18);
+                });
+            }
+        }
+
+        const synth = new PianoSynth();
+
+        /**
+         * ============================================================================
+         * 4. FUNCIONES DE UTILIDAD MUSICAL
+         * ============================================================================
+         */
+        function getNoteName(pitchClass) {
+            const normalized = ((pitchClass % 12) + 12) % 12;
+            return state.notation === 'EN' ? NOTES_EN[normalized] : NOTES_ES[normalized];
+        }
+
+        function getCurrentScale() {
+            return SCALES_DB.find(s => s.id === state.scaleId) || SCALES_DB[0];
+        }
+
+        function isBlackPitch(pitch) {
+            return [1, 3, 6, 8, 10].includes(((pitch % 12) + 12) % 12);
+        }
+
+        /**
+         * ============================================================================
+         * MOTOR DE DIGITACIÓN PIANÍSTICA REAL (2 OCTAVAS: C3 a B4)
+         * ============================================================================
+         * Calcula la digitación estándar (dedos 1 al 5) para cada nota de la escala
+         * a lo largo de todo el teclado visible (índices 0..23), respetando:
+         * - Reglas clásicas de tonalidades mayores/menores/modos (grupos 3+4 y 4+3).
+         * - Regla ergonómica de evitar el pulgar (1) en teclas negras.
+         * - Digitaciones idiomáticas para escalas de 5 (pentatónicas), 6 (blues) y 8 notas.
+         */
+        function computeScaleFingeringMap(rootIndex, scale, hand) {
+            const len = scale.intervals.length;
+
+            // 1. Construir la secuencia ascendente completa de teclas pertenecientes a la escala
+            // empezando desde la primera aparición de la tónica en la octava 3 (rootIndex)
+            // y también cubrir notas previas en el teclado por si la raíz no es C.
+            const scaleKeysFromRoot = [];
+            for (let k = rootIndex; k < 24; k++) {
+                const rel = (k - rootIndex) % 12;
+                if (scale.intervals.includes(rel)) {
+                    scaleKeysFromRoot.push(k);
+                }
+            }
+
+            // Determinar el patrón de dedos para la secuencia ascendente desde la tónica
+            let pattern = [];
+
+            if (len === 7) {
+                // ESCALAS HEPTATÓNICAS (Mayores, Menores, Modos Griegos)
+                pattern = getHeptatonicFingering(rootIndex, scale, hand, scaleKeysFromRoot.length);
+            } else if (len === 5) {
+                // ESCALAS PENTATÓNICAS (5 notas por octava -> grupos de 2 + 3 o 3 + 2)
+                pattern = getPentatonicFingering(rootIndex, scale, hand, scaleKeysFromRoot.length);
+            } else if (len === 6) {
+                // ESCALAS HEXÁTONAS (Blues / Tonos enteros -> grupos de 3 + 3)
+                pattern = getHexatonicFingering(rootIndex, scale, hand, scaleKeysFromRoot.length);
+            } else {
+                // ESCALAS OCTATÓNICAS / SIMÉTRICAS (8 notas -> alternancia 1-2-3-4 / 1-2-3-1-2-3-4)
+                pattern = getOctatonicFingering(rootIndex, scale, hand, scaleKeysFromRoot.length);
+            }
+
+            // Mapear cada keyIndex (0..23) a su dedo correspondiente
+            const keyToFinger = {};
+            scaleKeysFromRoot.forEach((keyIdx, i) => {
+                keyToFinger[keyIdx] = pattern[i];
+            });
+
+            // Para teclas de la escala que queden a la izquierda de la primera tónica (cuando rootIndex > 0),
+            // proyectamos el mismo patrón una octava abajo para mantener coherencia visual en todo el teclado
+            for (let k = 0; k < rootIndex; k++) {
+                const rel = ((k - rootIndex) % 12 + 12) % 12;
+                if (scale.intervals.includes(rel)) {
+                    const upperEquivalent = k + 12;
+                    if (keyToFinger[upperEquivalent]) {
+                        keyToFinger[k] = keyToFinger[upperEquivalent];
+                    }
+                }
+            }
+
+            return keyToFinger;
+        }
+
+        /**
+         * Digitación pianística estándar para escalas de 7 notas (Mayores, Menores, Modos)
+         */
+        function getHeptatonicFingering(rootIndex, scale, hand, totalNotes) {
+            // Tablas clásicas estándar para escala Mayor / Jónica y escalas paralelas
+            // Grupo A (Estándar C, G, D, A, E):
+            //   MD: 1, 2, 3, 1, 2, 3, 4 | 1, 2, 3, 1, 2, 3, 4, 5
+            //   MI: 5, 4, 3, 2, 1, 3, 2 | 1, 4, 3, 2, 1, 3, 2, 1
+            const isMajorType = [0, 2, 4, 5, 7, 9, 11].every((v, i) => scale.intervals[i] === v);
+            const isNaturalMinor = [0, 2, 3, 5, 7, 8, 10].every((v, i) => scale.intervals[i] === v);
+            const isHarmonicMinor = [0, 2, 3, 5, 7, 8, 11].every((v, i) => scale.intervals[i] === v);
+            const isMelodicMinor = [0, 2, 3, 5, 7, 9, 11].every((v, i) => scale.intervals[i] === v);
+            const isMinorFamily = isNaturalMinor || isHarmonicMinor || isMelodicMinor;
+
+            let cycle7 = null;
+            let topNoteFinger = null;
+
+            if (hand === 'RH') {
+                // Reglas específicas de Mano Derecha por tonalidad
+                if (rootIndex === 5 && (isMajorType || scale.intervals[3] === 5)) {
+                    // Fa Mayor (F) y escalas con 4ª justa en F (Bb es tecla negra): 1-2-3-4-1-2-3
+                    cycle7 = [1, 2, 3, 4, 1, 2, 3];
+                    topNoteFinger = 4;
+                } else if (!isBlackPitch(rootIndex)) {
+                    // Tónicas blancas estándar (C, D, E, G, A, B) -> 1-2-3-1-2-3-4
+                    cycle7 = [1, 2, 3, 1, 2, 3, 4];
+                    topNoteFinger = 5;
+                } else {
+                    // Tónicas en tecla negra: el pulgar (1) cae en la primera tecla blanca disponible
+                    const blackRhMap = {
+                        1:  [2, 3, 1, 2, 3, 4, 1], // C# / Db (pulgar en F y C)
+                        3:  [3, 1, 2, 3, 4, 1, 2], // D# / Eb (inicia con 3, pulgar en F y Bb/C)
+                        6:  [2, 3, 4, 1, 2, 3, 1], // F# / Gb (inicia con 2, pulgar en B y F)
+                        8:  [3, 4, 1, 2, 3, 1, 2], // G# / Ab (inicia con 3, pulgar en C y F)
+                        10: [4, 1, 2, 3, 1, 2, 3]  // A# / Bb (inicia con 4 o 2, pulgar en C y F)
+                    };
+                    // Ajuste ergonómico para Bb menor (10) donde 2-1-2-3-1-2-3 o 4-1-2-3-1-2-3 funciona
+                    if (rootIndex === 10 && isMinorFamily) {
+                        cycle7 = [2, 1, 2, 3, 1, 2, 3];
+                    } else if (rootIndex === 3 && isMinorFamily) {
+                        cycle7 = [3, 1, 2, 3, 4, 1, 2];
+                    } else {
+                        cycle7 = blackRhMap[rootIndex] || [2, 3, 1, 2, 3, 4, 1];
+                    }
+                }
+            } else {
+                // Reglas específicas de Mano Izquierda por tonalidad
+                if (rootIndex === 11 && isMajorType) {
+                    // Si Mayor (B Major): inicia con dedo 4 para evitar pulgar en teclas negras
+                    cycle7 = [4, 3, 2, 1, 4, 3, 2];
+                    topNoteFinger = 1;
+                } else if (!isBlackPitch(rootIndex)) {
+                    // Tónicas blancas estándar (C, D, E, F, G, A, B menor): 5-4-3-2-1-3-2
+                    cycle7 = [5, 4, 3, 2, 1, 3, 2];
+                    topNoteFinger = 1;
+                } else {
+                    // Tónicas en tecla negra para Mano Izquierda
+                    const blackLhMap = {
+                        1:  [3, 2, 1, 4, 3, 2, 1], // C# / Db
+                        3:  [3, 2, 1, 4, 3, 2, 1], // D# / Eb
+                        6:  [4, 3, 2, 1, 3, 2, 1], // F# / Gb
+                        8:  [3, 2, 1, 4, 3, 2, 1], // G# / Ab
+                        10: [3, 2, 1, 4, 3, 2, 1]  // A# / Bb
+                    };
+                    if (rootIndex === 10 && isMinorFamily) {
+                        cycle7 = [2, 1, 3, 2, 1, 4, 3];
+                    } else {
+                        cycle7 = blackLhMap[rootIndex] || [3, 2, 1, 4, 3, 2, 1];
+                    }
+                }
+            }
+
+            const result = [];
+            for (let i = 0; i < totalNotes; i++) {
+                // Si es exactamente la nota final de la 2ª octava (índice 14) y tenemos dedo terminal clásico (5 en MD, 1 en MI)
+                if (i === totalNotes - 1 && i % 7 === 0 && topNoteFinger !== null) {
+                    result.push(topNoteFinger);
+                } else {
+                    result.push(cycle7[i % 7]);
+                }
+            }
+            return result;
+        }
+
+        /**
+         * Digitación ergonómica para escalas Pentatónicas (5 notas: grupos 1-2-3 + 1-2)
+         */
+        function getPentatonicFingering(rootIndex, scale, hand, totalNotes) {
+            const isBlackStart = isBlackPitch(rootIndex);
+            let cycle5;
+
+            if (hand === 'RH') {
+                if (!isBlackStart) {
+                    // Ej. C Pentatónica Mayor (C-D-E-G-A) o A Pentatónica Menor (A-C-D-E-G)
+                    cycle5 = [1, 2, 3, 1, 2];
+                } else {
+                    // Ej. F# Pentatónica Mayor (solo teclas negras: 2-3-4-2-3) o Eb menor
+                    const allBlack = scale.intervals.every(iv => isBlackPitch(rootIndex + iv));
+                    cycle5 = allBlack ? [2, 3, 4, 2, 3] : [2, 3, 1, 2, 3];
+                }
+            } else {
+                if (!isBlackStart) {
+                    cycle5 = [5, 4, 3, 2, 1];
+                } else {
+                    const allBlack = scale.intervals.every(iv => isBlackPitch(rootIndex + iv));
+                    cycle5 = allBlack ? [4, 3, 2, 3, 2] : [3, 2, 1, 3, 2];
+                }
+            }
+
+            const result = [];
+            for (let i = 0; i < totalNotes; i++) {
+                if (i === totalNotes - 1 && i % 5 === 0 && !isBlackStart) {
+                    result.push(hand === 'RH' ? 3 : 1);
+                } else {
+                    result.push(cycle5[i % 5]);
+                }
+            }
+            return result;
+        }
+
+        /**
+         * Digitación ergonómica para escalas de 6 notas (Blues y Tonos Enteros: grupos 3 + 3)
+         */
+        function getHexatonicFingering(rootIndex, scale, hand, totalNotes) {
+            const isBlackStart = isBlackPitch(rootIndex);
+            let cycle6;
+
+            if (hand === 'RH') {
+                // C Blues (C-Eb-F-F#-G-Bb): 1-2-3-4-1-2 o 1-2-3-1-2-3
+                if (scale.id === 'blues' && rootIndex === 0) {
+                    cycle6 = [1, 2, 3, 4, 1, 2];
+                } else if (!isBlackStart) {
+                    cycle6 = [1, 2, 3, 1, 2, 3];
+                } else {
+                    cycle6 = [2, 3, 1, 2, 3, 4];
+                }
+            } else {
+                if (!isBlackStart) {
+                    cycle6 = [4, 3, 2, 1, 3, 2];
+                } else {
+                    cycle6 = [3, 2, 1, 3, 2, 1];
+                }
+            }
+
+            const result = [];
+            for (let i = 0; i < totalNotes; i++) {
+                if (i === totalNotes - 1 && i % 6 === 0 && !isBlackStart) {
+                    result.push(hand === 'RH' ? 4 : 1);
+                } else {
+                    result.push(cycle6[i % 6]);
+                }
+            }
+            return result;
+        }
+
+        /**
+         * Digitación ergonómica para escalas Octatónicas / Simétricas (8 notas: grupos 4 + 4)
+         */
+        function getOctatonicFingering(rootIndex, scale, hand, totalNotes) {
+            const isBlackStart = isBlackPitch(rootIndex);
+            const cycle8 = hand === 'RH'
+                ? (isBlackStart ? [2, 3, 1, 2, 3, 4, 1, 2] : [1, 2, 3, 4, 1, 2, 3, 4])
+                : (isBlackStart ? [3, 2, 1, 4, 3, 2, 1, 2] : [4, 3, 2, 1, 4, 3, 2, 1]);
+
+            const result = [];
+            for (let i = 0; i < totalNotes; i++) {
+                result.push(cycle8[i % 8]);
+            }
+            return result;
+        }
+
+        /**
+         * Calcula la fórmula de tonos y semitonos (T, S, T+S) de una escala
+         */
+        function getIntervalSteps(intervals) {
+            const full = [...intervals, 12];
+            const steps = [];
+            for (let i = 0; i < full.length - 1; i++) {
+                const diff = full[i + 1] - full[i];
+                if (diff === 1) steps.push('S');
+                else if (diff === 2) steps.push('T');
+                else if (diff === 3) steps.push('T+S');
+                else steps.push(`${diff}st`);
+            }
+            return steps;
+        }
+
+        /**
+         * Genera los acordes diatónicos (tríadas o séptimas) para escalas de 7 notas o derivadas
+         */
+        function generateDiatonicChords(rootIndex, scale) {
+            const len = scale.intervals.length;
+            const chords = [];
+            const romanUpper = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+
+            for (let i = 0; i < len; i++) {
+                const rootOffset = scale.intervals[i];
+                const thirdOffset = scale.intervals[(i + 2) % len] + (i + 2 >= len ? 12 : 0);
+                const fifthOffset = scale.intervals[(i + 4) % len] + (i + 4 >= len ? 12 : 0);
+
+                const thirdInt = thirdOffset - rootOffset;
+                const fifthInt = fifthOffset - rootOffset;
+
+                const noteIndices = [
+                    rootIndex + rootOffset,
+                    rootIndex + thirdOffset,
+                    rootIndex + fifthOffset
+                ];
+
+                let quality = '';
+                let isMinor = false;
+                let isDim = false;
+                let isAug = false;
+
+                if (thirdInt === 4 && fifthInt === 7) {
+                    quality = '';
+                } else if (thirdInt === 3 && fifthInt === 7) {
+                    quality = 'm';
+                    isMinor = true;
+                } else if (thirdInt === 3 && fifthInt === 6) {
+                    quality = 'dim';
+                    isDim = true;
+                } else if (thirdInt === 4 && fifthInt === 8) {
+                    quality = 'aug';
+                    isAug = true;
+                } else {
+                    quality = 'sus';
+                }
+
+                if (state.chordMode === 'seventh') {
+                    const seventhOffset = scale.intervals[(i + 6) % len] + (i + 6 >= len ? 12 : 0);
+                    const seventhInt = seventhOffset - rootOffset;
+                    noteIndices.push(rootIndex + seventhOffset);
+
+                    if (!isMinor && !isDim && !isAug) {
+                        quality = seventhInt === 11 ? 'maj7' : '7';
+                    } else if (isMinor) {
+                        quality = seventhInt === 11 ? 'm(maj7)' : 'm7';
+                    } else if (isDim) {
+                        quality = seventhInt === 9 ? 'dim7' : 'm7b5';
+                    } else if (isAug) {
+                        quality = seventhInt === 11 ? 'aug(maj7)' : 'aug7';
+                    }
+                }
+
+                // Ajustar índices al rango visible del piano (0..23)
+                const normalizedKeys = noteIndices.map(k => (k >= 24 ? k - 12 : k));
+                const chordRootName = getNoteName(rootIndex + rootOffset);
+                let roman = romanUpper[i] || `${i + 1}`;
+                if (isMinor || isDim) roman = roman.toLowerCase();
+                if (isDim) roman += '°';
+                if (isAug) roman += '+';
+
+                chords.push({
+                    roman,
+                    name: `${chordRootName}${quality}`,
+                    notes: normalizedKeys.map(k => getNoteName(k % 12)),
+                    keyIndices: normalizedKeys
+                });
+            }
+            return chords;
+        }
+
+        /**
+         * ============================================================================
+         * 5. CONSTRUCCIÓN Y ACTUALIZACIÓN DE LA INTERFAZ (DOM)
+         * ============================================================================
+         */
+        function buildRootSelector() {
+            const grid = document.getElementById('root-selector-grid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < 12; i++) {
+                const isSelected = state.rootIndex === i;
+                const isBlack = isBlackPitch(i);
+                const btn = document.createElement('button');
+                btn.className = `py-2 px-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                    isSelected
+                        ? 'bg-rose-600 border-rose-400 text-white shadow-lg shadow-rose-600/30 scale-[1.03]'
+                        : isBlack
+                            ? 'bg-studio-950 border-zinc-800 text-zinc-300 hover:bg-studio-800 hover:border-zinc-600'
+                            : 'bg-studio-800 border-zinc-700/70 text-zinc-100 hover:bg-studio-700'
+                }`;
+                btn.textContent = state.notation === 'EN' ? NOTES_DISPLAY[i] : NOTES_ES[i];
+                btn.addEventListener('click', () => {
+                    stopScalePlayback();
+                    state.activeChordNotes = null;
+                    state.rootIndex = i;
+                    synth.playNote(i + 12, 0.5, 0.35);
+                    updateAllUI();
+                });
+                grid.appendChild(btn);
+            }
+
+            const enName = NOTES_DISPLAY[state.rootIndex];
+            const esName = NOTES_ES[state.rootIndex];
+            document.getElementById('selected-root-display').textContent = `${enName} (${esName})`;
+        }
+
+        function buildScaleSelector() {
+            const select = document.getElementById('scale-select');
+            select.innerHTML = '';
+
+            const categories = [...new Set(SCALES_DB.map(s => s.category))];
+            categories.forEach(cat => {
+                const group = document.createElement('optgroup');
+                group.label = cat;
+                SCALES_DB.filter(s => s.category === cat).forEach(scale => {
+                    const opt = document.createElement('option');
+                    opt.value = scale.id;
+                    opt.textContent = scale.name;
+                    if (scale.id === state.scaleId) opt.selected = true;
+                    group.appendChild(opt);
+                });
+                select.appendChild(group);
+            });
+        }
+
+        function buildPianoKeyboard() {
+            const container = document.getElementById('piano-keyboard');
+            container.innerHTML = '';
+
+            // 2 octavas completas: C3 (índice 0) hasta B4 (índice 23) -> 14 teclas blancas, 10 negras
+            const whiteKeys = [];
+            for (let k = 0; k < 24; k++) {
+                if (!isBlackPitch(k)) whiteKeys.push(k);
+            }
+
+            // Crear teclas blancas
+            whiteKeys.forEach(keyIndex => {
+                const keyEl = document.createElement('div');
+                keyEl.className = 'white-key';
+                keyEl.dataset.keyIndex = keyIndex;
+                keyEl.innerHTML = `
+                    <span data-role="degree" class="degree-badge hidden">1</span>
+                    <span data-role="note-label" class="text-[11px] font-mono font-bold text-slate-700">C3</span>
+                `;
+                attachKeyEvents(keyEl, keyIndex);
+                container.appendChild(keyEl);
+            });
+
+            // Crear teclas negras posicionadas proporcionalmente sobre las 14 teclas blancas
+            const totalWhite = whiteKeys.length;
+            let whiteCountBefore = 0;
+            for (let k = 0; k < 24; k++) {
+                if (!isBlackPitch(k)) {
+                    whiteCountBefore++;
+                } else {
+                    const keyEl = document.createElement('div');
+                    keyEl.className = 'black-key';
+                    keyEl.dataset.keyIndex = k;
+                    const leftPercent = (whiteCountBefore / totalWhite) * 100;
+                    keyEl.style.left = `calc(${leftPercent}% )`;
+                    keyEl.innerHTML = `
+                        <span data-role="degree" class="degree-badge hidden">1</span>
+                        <span data-role="note-label" class="text-[9px] font-mono font-semibold text-zinc-300">C#</span>
+                    `;
+                    attachKeyEvents(keyEl, k);
+                    container.appendChild(keyEl);
+                }
+            }
+        }
+
+        function attachKeyEvents(el, keyIndex) {
+            const trigger = (e) => {
+                e.preventDefault();
+                synth.playNote(keyIndex, 0.85, 0.5);
+                flashPianoKey(keyIndex, 280);
+            };
+            el.addEventListener('mousedown', trigger);
+            el.addEventListener('touchstart', trigger, { passive: false });
+        }
+
+        function togglePlayButtons(isPlaying) {
+            const playBtn = document.getElementById('btn-play-scale');
+            const stopBtn = document.getElementById('btn-stop-scale');
+            if (isPlaying) {
+                playBtn.classList.add('hidden');
+                stopBtn.classList.remove('hidden');
+            } else {
+                playBtn.classList.remove('hidden');
+                stopBtn.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Actualiza los colores, dedos/grados y etiquetas en el piano según la escala o acorde activo
+         */
+        function updatePianoHighlights() {
+            const scale = getCurrentScale();
+            const keys = document.querySelectorAll('#piano-keyboard [data-key-index]');
+
+            // Mapa de pitchClass (0-11) -> grado ('1', 'b3', etc.)
+            const scalePitchToDegree = {};
+            scale.intervals.forEach((interval, idx) => {
+                const pitch = (state.rootIndex + interval) % 12;
+                scalePitchToDegree[pitch] = scale.degrees[idx];
+            });
+
+            // Mapa de keyIndex (0-23) -> dedo pianístico (1..5) según la mano elegida
+            const keyToFinger = computeScaleFingeringMap(state.rootIndex, scale, state.hand);
+
+            keys.forEach(keyEl => {
+                const keyIndex = parseInt(keyEl.dataset.keyIndex, 10);
+                const pitch = keyIndex % 12;
+                const octave = Math.floor(keyIndex / 12) + 3;
+                const isBlack = keyEl.classList.contains('black-key');
+
+                // Limpiar clases previas
+                keyEl.classList.remove('is-root', 'is-scale');
+
+                const degreeEl = keyEl.querySelector('[data-role="degree"]');
+                const labelEl = keyEl.querySelector('[data-role="note-label"]');
+                degreeEl.classList.remove('is-thumb');
+
+                // Actualizar etiqueta de nota (Inglés/Latino y visibilidad)
+                labelEl.textContent = isBlack ? getNoteName(pitch) : `${getNoteName(pitch)}${octave}`;
+                labelEl.style.visibility = state.showLabels ? 'visible' : 'hidden';
+
+                // Si hay un acorde diatónico seleccionado, resaltamos específicamente sus notas
+                if (state.activeChordNotes) {
+                    if (state.activeChordNotes.includes(keyIndex)) {
+                        const isChordRoot = keyIndex === state.activeChordNotes[0];
+                        keyEl.classList.add(isChordRoot ? 'is-root' : 'is-scale');
+                        const chordPos = state.activeChordNotes.indexOf(keyIndex);
+                        // Digitación estándar de acordes (MD: 1-3-5 / 1-2-3-5, MI: 5-3-1 / 5-3-2-1)
+                        const chordFingersRH = state.activeChordNotes.length === 4 ? [1, 2, 3, 5] : [1, 3, 5];
+                        const chordFingersLH = state.activeChordNotes.length === 4 ? [5, 3, 2, 1] : [5, 3, 1];
+                        const finger = state.hand === 'RH' ? chordFingersRH[chordPos] : chordFingersLH[chordPos];
+
+                        degreeEl.textContent = state.badgeMode === 'fingering'
+                            ? (finger || '•')
+                            : (scalePitchToDegree[pitch] || '•');
+                        if (state.badgeMode === 'fingering' && finger === 1) {
+                            degreeEl.classList.add('is-thumb');
+                        }
+                        degreeEl.classList.remove('hidden');
+                    } else {
+                        degreeEl.classList.add('hidden');
+                    }
+                    return;
+                }
+
+                // Modo normal: resaltar notas de la escala seleccionada
+                if (scalePitchToDegree.hasOwnProperty(pitch)) {
+                    const degree = scalePitchToDegree[pitch];
+                    const finger = keyToFinger[keyIndex];
+
+                    if (pitch === state.rootIndex) {
+                        keyEl.classList.add('is-root');
+                    } else {
+                        keyEl.classList.add('is-scale');
+                    }
+
+                    if (state.badgeMode === 'fingering' && finger) {
+                        degreeEl.textContent = finger;
+                        if (finger === 1) {
+                            degreeEl.classList.add('is-thumb');
+                        }
+                    } else {
+                        degreeEl.textContent = degree;
+                    }
+                    degreeEl.classList.remove('hidden');
+                } else {
+                    degreeEl.classList.add('hidden');
+                }
+            });
+
+            // Actualizar texto indicador de mano activa
+            const handLabel = state.hand === 'RH' ? 'Mano Derecha (MD)' : 'Mano Izquierda (MI)';
+            const liveText = document.getElementById('live-finger-text');
+            if (liveText && !state.isPlayingScale) {
+                liveText.innerHTML = `Digitación: <strong class="text-emerald-400">${handLabel}</strong>`;
+            }
+        }
+
+        /**
+         * Actualiza el panel de información teórica y acordes diatónicos
+         */
+        function updateTheoryPanel() {
+            const scale = getCurrentScale();
+            const rootName = getNoteName(state.rootIndex);
+            const keyToFinger = computeScaleFingeringMap(state.rootIndex, scale, state.hand);
+
+            document.getElementById('theory-title').querySelector('span').textContent = `${rootName} ${scale.name}`;
+            document.getElementById('scale-description').textContent = scale.description;
+            document.getElementById('note-count-badge').textContent = `${scale.intervals.length} notas`;
+            document.getElementById('hand-badge-label').textContent = state.hand === 'RH' ? 'Mano Derecha (MD)' : 'Mano Izquierda (MI)';
+
+            // 1. Renderizar tarjetas de notas con su número de dedo y grado
+            const notesContainer = document.getElementById('scale-notes-cards');
+            notesContainer.innerHTML = '';
+
+            // Incluimos la octava superior (intervalo 12) para ver la digitación completa de 1 octava
+            const oneOctaveIntervals = [...scale.intervals, 12];
+
+            oneOctaveIntervals.forEach((interval, idx) => {
+                const pitch = (state.rootIndex + interval) % 12;
+                const noteName = getNoteName(pitch);
+                const isOctaveTop = idx === scale.intervals.length;
+                const degree = isOctaveTop ? '8 (1)' : scale.degrees[idx];
+                const isRoot = idx === 0 || isOctaveTop;
+                const targetKey = state.rootIndex + interval;
+                const finger = keyToFinger[targetKey] || '-';
+                const isThumb = finger === 1;
+
+                const card = document.createElement('button');
+                card.className = `flex flex-col items-center justify-center min-w-[56px] px-2.5 py-2 rounded-xl border transition-all cursor-pointer active:scale-95 ${
+                    isRoot
+                        ? 'bg-rose-500/15 border-rose-500/50 text-rose-200 hover:bg-rose-500/25'
+                        : 'bg-sky-500/10 border-sky-500/30 text-sky-200 hover:bg-sky-500/20'
+                }`;
+                card.title = `${noteName} · Dedo ${finger} · Grado ${degree}`;
+                card.innerHTML = `
+                    <span class="text-[11px] font-mono px-1.5 py-0.5 rounded-full leading-none font-bold ${
+                        isThumb
+                            ? 'bg-amber-500 text-zinc-950'
+                            : 'bg-zinc-800 text-zinc-200'
+                    }">Dedo ${finger}</span>
+                    <span class="text-sm font-bold text-white mt-1">${noteName}</span>
+                    <span class="text-[10px] font-mono text-zinc-400">${degree}</span>
+                `;
+
+                card.addEventListener('click', () => {
+                    if (targetKey < 24) {
+                        synth.playNote(targetKey, 0.7, 0.45);
+                        flashPianoKey(targetKey, 300);
+                    }
+                });
+
+                notesContainer.appendChild(card);
+            });
+
+            // 2. Renderizar Fórmula de Intervalos (T - T - S...)
+            const formulaContainer = document.getElementById('intervals-formula');
+            formulaContainer.innerHTML = '';
+            const steps = getIntervalSteps(scale.intervals);
+
+            steps.forEach((step, idx) => {
+                const badge = document.createElement('span');
+                const isSemitone = step === 'S';
+                badge.className = `px-2.5 py-1 rounded-md font-bold ${
+                    isSemitone
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : step === 'T+S'
+                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                            : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                }`;
+                badge.textContent = step;
+                formulaContainer.appendChild(badge);
+
+                if (idx < steps.length - 1) {
+                    const sep = document.createElement('span');
+                    sep.className = 'text-zinc-600';
+                    sep.textContent = '—';
+                    formulaContainer.appendChild(sep);
+                }
+            });
+
+            // 3. Renderizar Acordes Diatónicos
+            const chordsGrid = document.getElementById('diatonic-chords-grid');
+            chordsGrid.innerHTML = '';
+            const chords = generateDiatonicChords(state.rootIndex, scale);
+
+            chords.forEach(chord => {
+                const btn = document.createElement('button');
+                btn.className = 'group flex flex-col items-start p-3 rounded-xl bg-studio-800/80 hover:bg-studio-700/90 border border-zinc-700/70 hover:border-sky-500/50 transition-all text-left cursor-pointer active:scale-[0.98]';
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full mb-1">
+                        <span class="text-xs font-mono font-bold text-sky-400 group-hover:text-sky-300">${chord.roman}</span>
+                        <i data-lucide="volume-2" class="w-3.5 h-3.5 text-zinc-500 group-hover:text-emerald-400 transition-colors"></i>
+                    </div>
+                    <span class="text-sm font-bold text-white tracking-tight">${chord.name}</span>
+                    <span class="text-[11px] font-mono text-zinc-400 mt-1">${chord.notes.join(' · ')}</span>
+                `;
+
+                btn.addEventListener('click', () => {
+                    stopScalePlayback();
+                    state.activeChordNotes = chord.keyIndices;
+                    updatePianoHighlights();
+                    synth.playChord(chord.keyIndices, 1.3);
+
+                    // Destello visual temporal de ejecución
+                    chord.keyIndices.forEach(k => flashPianoKey(k, 450));
+
+                    // Mostrar banner de acorde activo
+                    const banner = document.getElementById('active-chord-banner');
+                    banner.classList.remove('hidden');
+                    banner.classList.add('flex');
+                    document.getElementById('active-chord-name').textContent = chord.name;
+                    document.getElementById('active-chord-notes').textContent = `(${chord.notes.join(' - ')})`;
+                });
+
+                chordsGrid.appendChild(btn);
+            });
+
+            // Ocultar banner si no hay acorde activo
+            if (!state.activeChordNotes) {
+                const banner = document.getElementById('active-chord-banner');
+                banner.classList.add('hidden');
+                banner.classList.remove('flex');
+            }
+
+            // Re-inicializar iconos Lucide recién insertados
+            lucide.createIcons();
+        }
+
+        function flashPianoKey(keyIndex, durationMs = 300) {
+            const keyEl = document.querySelector(`#piano-keyboard [data-key-index="${keyIndex}"]`);
+            if (!keyEl) return;
+            keyEl.classList.add('is-playing', 'pressed');
+            setTimeout(() => {
+                keyEl.classList.remove('is-playing', 'pressed');
+            }, durationMs);
+        }
+
+        /**
+         * ============================================================================
+         * 6. REPRODUCCIÓN AUTOMÁTICA DE ESCALA (ASCENDENTE Y DESCENDENTE)
+         * ============================================================================
+         */
+        function playScaleSequence() {
+            stopScalePlayback();
+            state.activeChordNotes = null;
+            updatePianoHighlights();
+
+            const scale = getCurrentScale();
+            const keyToFinger = computeScaleFingeringMap(state.rootIndex, scale, state.hand);
+
+            // Construir secuencia ascendente (incluyendo la octava superior) + descendente
+            const ascending = [...scale.intervals, 12].map(interval => state.rootIndex + interval);
+            // Filtrar para asegurar que no exceda las 24 teclas (0..23)
+            const validAscending = ascending.filter(k => k < 24);
+            const descending = [...validAscending].reverse().slice(1);
+            const fullSequence = [...validAscending, ...descending];
+
+            state.isPlayingScale = true;
+            togglePlayButtons(true);
+
+            // Duración por nota basada en BPM (corcheas o negras fluidas)
+            const stepMs = (60 / state.bpm) * 550;
+            const liveText = document.getElementById('live-finger-text');
+
+            fullSequence.forEach((keyIndex, stepIdx) => {
+                const timerId = setTimeout(() => {
+                    if (!state.isPlayingScale) return;
+                    synth.playNote(keyIndex, (stepMs / 1000) * 1.15, 0.45);
+                    flashPianoKey(keyIndex, stepMs * 0.85);
+
+                    const finger = keyToFinger[keyIndex];
+                    const noteName = getNoteName(keyIndex % 12);
+                    if (liveText && finger) {
+                        liveText.innerHTML = `Tocando <strong class="text-white">${noteName}</strong> → <strong class="text-amber-400">Dedo ${FINGER_NAMES[finger]}</strong>`;
+                    }
+
+                    // Finalizar reproducción en la última nota
+                    if (stepIdx === fullSequence.length - 1) {
+                        const endTimer = setTimeout(() => {
+                            stopScalePlayback();
+                        }, stepMs);
+                        state.playbackTimers.push(endTimer);
+                    }
+                }, stepIdx * stepMs);
+
+                state.playbackTimers.push(timerId);
+            });
+        }
+
+        function stopScalePlayback() {
+            state.isPlayingScale = false;
+            state.playbackTimers.forEach(id => clearTimeout(id));
+            state.playbackTimers = [];
+            togglePlayButtons(false);
+            const handLabel = state.hand === 'RH' ? 'Mano Derecha (MD)' : 'Mano Izquierda (MI)';
+            const liveText = document.getElementById('live-finger-text');
+            if (liveText) {
+                liveText.innerHTML = `Digitación: <strong class="text-emerald-400">${handLabel}</strong>`;
+            }
+        }
+
+        function updateAllUI() {
+            buildRootSelector();
+            updatePianoHighlights();
+            updateTheoryPanel();
+        }
+
+        /**
+         * ============================================================================
+         * 7. EVENT LISTENERS E INICIALIZACIÓN
+         * ============================================================================
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            buildScaleSelector();
+            buildPianoKeyboard();
+            updateAllUI();
+
+            // Cambio de escala en el dropdown
+            document.getElementById('scale-select').addEventListener('change', (e) => {
+                stopScalePlayback();
+                state.activeChordNotes = null;
+                state.scaleId = e.target.value;
+                updateAllUI();
+            });
+
+            // Selector de Mano (Mano Derecha vs Mano Izquierda)
+            const btnRh = document.getElementById('btn-hand-rh');
+            const btnLh = document.getElementById('btn-hand-lh');
+
+            btnRh.addEventListener('click', () => {
+                stopScalePlayback();
+                state.hand = 'RH';
+                btnRh.className = 'px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-600 text-white transition-all flex items-center gap-1';
+                btnLh.className = 'px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all flex items-center gap-1';
+                updateAllUI();
+            });
+
+            btnLh.addEventListener('click', () => {
+                stopScalePlayback();
+                state.hand = 'LH';
+                btnLh.className = 'px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-600 text-white transition-all flex items-center gap-1';
+                btnRh.className = 'px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all flex items-center gap-1';
+                updateAllUI();
+            });
+
+            // Selector de Insignia (Dedos 1-5 vs Grados)
+            const btnFingering = document.getElementById('btn-badge-fingering');
+            const btnDegrees = document.getElementById('btn-badge-degrees');
+
+            btnFingering.addEventListener('click', () => {
+                state.badgeMode = 'fingering';
+                btnFingering.className = 'px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-600 text-white transition-all';
+                btnDegrees.className = 'px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all';
+                updatePianoHighlights();
+            });
+
+            btnDegrees.addEventListener('click', () => {
+                state.badgeMode = 'degrees';
+                btnDegrees.className = 'px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-600 text-white transition-all';
+                btnFingering.className = 'px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all';
+                updatePianoHighlights();
+            });
+
+            // Botones de notación (C D E vs Do Re Mi)
+            const btnEn = document.getElementById('btn-notation-en');
+            const btnEs = document.getElementById('btn-notation-es');
+
+            btnEn.addEventListener('click', () => {
+                state.notation = 'EN';
+                btnEn.className = 'px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-600 text-white transition-all';
+                btnEs.className = 'px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all';
+                updateAllUI();
+            });
+
+            btnEs.addEventListener('click', () => {
+                state.notation = 'ES';
+                btnEs.className = 'px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-600 text-white transition-all';
+                btnEn.className = 'px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all';
+                updateAllUI();
+            });
+
+            // Toggle mostrar/ocultar etiquetas
+            document.getElementById('btn-toggle-labels').addEventListener('click', () => {
+                state.showLabels = !state.showLabels;
+                document.getElementById('label-status').textContent = state.showLabels ? 'ON' : 'OFF';
+                updatePianoHighlights();
+            });
+
+            // Cambio de timbre de sintetizador
+            document.getElementById('synth-waveform').addEventListener('change', (e) => {
+                state.waveform = e.target.value;
+                synth.playNote(state.rootIndex + 12, 0.4, 0.35);
+            });
+
+            // Control de velocidad BPM
+            const bpmSlider = document.getElementById('bpm-slider');
+            const bpmValue = document.getElementById('bpm-value');
+            bpmSlider.addEventListener('input', (e) => {
+                state.bpm = parseInt(e.target.value, 10);
+                bpmValue.textContent = state.bpm;
+            });
+
+            // Botones de reproducción
+            document.getElementById('btn-play-scale').addEventListener('click', playScaleSequence);
+            document.getElementById('btn-stop-scale').addEventListener('click', stopScalePlayback);
+
+            // Toggle Tríadas vs Séptimas
+            const btnTriad = document.getElementById('btn-chords-triad');
+            const btnSeventh = document.getElementById('btn-chords-seventh');
+
+            btnTriad.addEventListener('click', () => {
+                state.chordMode = 'triad';
+                state.activeChordNotes = null;
+                btnTriad.className = 'px-2.5 py-1 text-xs font-medium rounded-md bg-sky-600 text-white transition-all';
+                btnSeventh.className = 'px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all';
+                updateAllUI();
+            });
+
+            btnSeventh.addEventListener('click', () => {
+                state.chordMode = 'seventh';
+                state.activeChordNotes = null;
+                btnSeventh.className = 'px-2.5 py-1 text-xs font-medium rounded-md bg-sky-600 text-white transition-all';
+                btnTriad.className = 'px-2.5 py-1 text-xs font-medium rounded-md text-zinc-400 hover:text-white transition-all';
+                updateAllUI();
+            });
+
+            // Limpiar selección de acorde
+            document.getElementById('btn-clear-chord').addEventListener('click', () => {
+                state.activeChordNotes = null;
+                updateAllUI();
+            });
+
+            // Soporte para teclado físico de la computadora
+            const pressedKeys = new Set();
+            window.addEventListener('keydown', (e) => {
+                if (e.repeat || e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+                const key = e.key.toLowerCase();
+                if (KEYBOARD_MAP.hasOwnProperty(key) && !pressedKeys.has(key)) {
+                    pressedKeys.add(key);
+                    const keyIndex = KEYBOARD_MAP[key];
+                    synth.playNote(keyIndex, 0.85, 0.5);
+                    flashPianoKey(keyIndex, 280);
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                pressedKeys.delete(e.key.toLowerCase());
+            });
+        });
+    </script>
+</body>
+</html>
